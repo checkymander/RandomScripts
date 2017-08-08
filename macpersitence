@@ -1,0 +1,18 @@
+tell application "Calendar"
+	activate
+	set tApp to "Calendar"
+	tell application "System Events" to set visible of process tApp to false
+	create calendar with name "testpersist"
+	delay 2
+	tell calendar "testpersist"
+		set theDate to current date
+		set theFile to "//Users//checky//Documents//pingalarm.app"
+		make new event at end with properties {description:"Event Description", summary:"Event Name", location:"Event Location", start date:theDate, allday event:true, recurrence:"FREQ=DAILY;COUNT=10"}
+		set theEvent to event 1
+		tell theEvent
+			-- Something here is causing an error.
+			make new open file alarm at end with properties {trigger date:theDate, filepath:theFile}
+		end tell
+	end tell
+	quit
+end tell
