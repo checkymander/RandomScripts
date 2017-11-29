@@ -8,3 +8,6 @@
 
 <h2>iMessageBackdoor.py</h2>
 <p>A script that writes an applescript handler file into the preferences of the iMessage Application. Allows you to backdoor iMessage with custom AppleScript handlers.</p>
+
+<h2>GithubSearch.py</h2>
+<p>A script that uses the github.com search from the Web Application to search for sensitive info. Unfinished due to not being as useful as originally planned. Contains good example code for catching CSRF Tokens, Sending cookies, and Parsing HTML using BeautifulSoup</p>
